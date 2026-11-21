@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/te-hook\" --host codex",
-            "commandWindows": "python -X --% -u -X utf8 -c e=__import__('os').environ;r=e.get('PLUGIN_ROOT')or(e['CLAUDE_PLUGIN_ROOT']);s=__import__('sys');s.argv[:]=[r+'/scripts/te_bootstrap.py','hook','--host','codex'];__import__('runpy').run_path(s.argv[0],run_name='__main__')",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -Command \"exit (Start-Process -Wait -NoNewWindow -PassThru -FilePath (Join-Path ([string]::Concat([Environment]::GetEnvironmentVariable('PLUGIN_ROOT','Process'),[Environment]::GetEnvironmentVariable('CLAUDE_PLUGIN_ROOT','Process'))) 'scripts\\te-hook.cmd') -ArgumentList '--host','codex').ExitCode\"",
             "timeout": 15
           }
         ]
@@ -18,7 +18,7 @@
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/te-hook\" --host codex",
-            "commandWindows": "python -X --% -u -X utf8 -c e=__import__('os').environ;r=e.get('PLUGIN_ROOT')or(e['CLAUDE_PLUGIN_ROOT']);s=__import__('sys');s.argv[:]=[r+'/scripts/te_bootstrap.py','hook','--host','codex'];__import__('runpy').run_path(s.argv[0],run_name='__main__')",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -Command \"exit (Start-Process -Wait -NoNewWindow -PassThru -FilePath (Join-Path ([string]::Concat([Environment]::GetEnvironmentVariable('PLUGIN_ROOT','Process'),[Environment]::GetEnvironmentVariable('CLAUDE_PLUGIN_ROOT','Process'))) 'scripts\\te-hook.cmd') -ArgumentList '--host','codex').ExitCode\"",
             "timeout": 10
           }
         ]
@@ -30,7 +30,7 @@
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/te-hook\" --host codex",
-            "commandWindows": "python -X --% -u -X utf8 -c e=__import__('os').environ;r=e.get('PLUGIN_ROOT')or(e['CLAUDE_PLUGIN_ROOT']);s=__import__('sys');s.argv[:]=[r+'/scripts/te_bootstrap.py','hook','--host','codex'];__import__('runpy').run_path(s.argv[0],run_name='__main__')",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -Command \"exit (Start-Process -Wait -NoNewWindow -PassThru -FilePath (Join-Path ([string]::Concat([Environment]::GetEnvironmentVariable('PLUGIN_ROOT','Process'),[Environment]::GetEnvironmentVariable('CLAUDE_PLUGIN_ROOT','Process'))) 'scripts\\te-hook.cmd') -ArgumentList '--host','codex').ExitCode\"",
             "timeout": 60
           }
         ]
@@ -42,7 +42,7 @@
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/te-hook\" --host codex",
-            "commandWindows": "python -X --% -u -X utf8 -c e=__import__('os').environ;r=e.get('PLUGIN_ROOT')or(e['CLAUDE_PLUGIN_ROOT']);s=__import__('sys');s.argv[:]=[r+'/scripts/te_bootstrap.py','hook','--host','codex'];__import__('runpy').run_path(s.argv[0],run_name='__main__')",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -Command \"exit (Start-Process -Wait -NoNewWindow -PassThru -FilePath (Join-Path ([string]::Concat([Environment]::GetEnvironmentVariable('PLUGIN_ROOT','Process'),[Environment]::GetEnvironmentVariable('CLAUDE_PLUGIN_ROOT','Process'))) 'scripts\\te-hook.cmd') -ArgumentList '--host','codex').ExitCode\"",
             "timeout": 10
           }
         ]
@@ -54,7 +54,7 @@
           {
             "type": "command",
             "command": "\"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/scripts/te-hook\" --host codex",
-            "commandWindows": "python -X --% -u -X utf8 -c e=__import__('os').environ;r=e.get('PLUGIN_ROOT')or(e['CLAUDE_PLUGIN_ROOT']);s=__import__('sys');s.argv[:]=[r+'/scripts/te_bootstrap.py','hook','--host','codex'];__import__('runpy').run_path(s.argv[0],run_name='__main__')",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -Command \"exit (Start-Process -Wait -NoNewWindow -PassThru -FilePath (Join-Path ([string]::Concat([Environment]::GetEnvironmentVariable('PLUGIN_ROOT','Process'),[Environment]::GetEnvironmentVariable('CLAUDE_PLUGIN_ROOT','Process'))) 'scripts\\te-hook.cmd') -ArgumentList '--host','codex').ExitCode\"",
             "timeout": 3
           }
         ]

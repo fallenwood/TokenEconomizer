@@ -13,6 +13,25 @@ if [ "${OS:-}" = Windows_NT ]; then
 fi
 # Session logs are UTF-8; without this, Python on Windows reads them in the ANSI code page.
 export PYTHONUTF8=1
+probe='import sys; sys.exit(sys.version_info < (3, 10))'
+uv_venv_python() {
+  _home=${TOKENECONOMIZER_HOME:-${HOME:-}}
+  [ -n "$_home" ] || return 1
+  if [ "${OS:-}" = Windows_NT ]; then
+    case $_home in *\\*) _home=$(printf '%s' "$_home" | tr '\\' '/') ;; esac
+    _env="$_home/uv-venv"
+    _python="$_env/Scripts/python.exe"
+  else
+    _env="$_home/uv-venv"
+    _python="$_env/bin/python"
+  fi
+  [ -x "$_python" ] || {
+    "$1" venv --allow-existing --no-project --python 3.10 "$_env" \
+      >/dev/null 2>&1 || return 1
+  }
+  [ -x "$_python" ] || return 1
+  printf '%s\n' "$_python"
+}
 outside_windowsapps() {
   set -f; _ifs=$IFS; IFS=:
   for _d in $PATH; do
@@ -27,9 +46,17 @@ if [ "${OS:-}" = Windows_NT ]; then
   for py in "${TE_PYTHON:-}" python3 python py; do
     [ -n "$py" ] && p=$(command -v "$py" 2>/dev/null) || continue
     case $p in *WindowsApps*) p=$(outside_windowsapps "$py") || continue ;; esac
+    case $py in uv|uv.exe|uv.cmd|*/uv|*/uv.exe|*/uv.cmd|*\\uv|*\\uv.exe|*\\uv.cmd)
+      _python=$(uv_venv_python "$p") || continue
+      exec "$_python" "$dir/te_bootstrap.py" cli "$@" ;;
+    esac
     [ "$py" = py ] && exec "$p" -3 "$dir/te_bootstrap.py" cli "$@"
     exec "$p" "$dir/te_bootstrap.py" cli "$@"
   done
+  p=$(command -v uv.exe 2>/dev/null || command -v uv 2>/dev/null || printf uv)
+  _python=$(uv_venv_python "$p") || _python=
+  [ -n "$_python" ] && "$_python" -E -S -c "$probe" </dev/null >/dev/null 2>&1 &&
+    exec "$_python" "$dir/te_bootstrap.py" cli "$@"
   for py in "${TE_PYTHON:-}" python3 python py; do
     [ -n "$py" ] && command -v "$py" >/dev/null 2>&1 || continue
     "$py" -c "" </dev/null >/dev/null 2>&1 || continue
@@ -45,9 +72,14 @@ else
   # runs no Python (a pyenv shim with no version set exits 127) is passed over. The probe
   # skips `site` (-E -S).
   if [ -n "${TE_PYTHON:-}" ] && command -v "$TE_PYTHON" >/dev/null 2>&1; then
-    exec "$TE_PYTHON" "$dir/te_bootstrap.py" cli "$@"
+    case $TE_PYTHON in
+      uv|uv.exe|uv.cmd|*/uv|*/uv.exe|*/uv.cmd|*\\uv|*\\uv.exe|*\\uv.cmd)
+        if _python=$(uv_venv_python "$TE_PYTHON"); then
+          exec "$_python" "$dir/te_bootstrap.py" cli "$@"
+        fi ;;
+      *) exec "$TE_PYTHON" "$dir/te_bootstrap.py" cli "$@" ;;
+    esac
   fi
-  probe='import sys; sys.exit(sys.version_info < (3, 10))'
   old=
   for py in python3 python3.15 python3.14 python3.13 python3.12 python3.11 python3.10 python; do
     command -v "$py" >/dev/null 2>&1 || continue
@@ -57,6 +89,9 @@ else
       1) [ -n "$old" ] || old=$py ;;
     esac
   done
+  _python=$(uv_venv_python uv) || _python=
+  [ -n "$_python" ] && "$_python" -E -S -c "$probe" </dev/null >/dev/null 2>&1 &&
+    exec "$_python" "$dir/te_bootstrap.py" cli "$@"
   [ -n "$old" ] && exec "$old" "$dir/te_bootstrap.py" cli "$@"
 fi
 echo "te: no python3 on PATH (set TE_PYTHON)" >&2

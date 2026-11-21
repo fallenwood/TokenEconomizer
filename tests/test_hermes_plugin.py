@@ -992,6 +992,25 @@ def test_te_runs_the_command_line_for_hermes_and_returns_its_output(monkeypatch)
     assert seen["kw"]["env"]["HERMES_HOME"] == "/h"
     assert seen["kw"]["timeout"] <= plugin.HOOK_TIMEOUT_S
 
+
+def test_te_uses_uv_when_named_as_the_python(tmp_path, monkeypatch):
+    seen = {}
+
+    def run(cmd, **kw):
+        seen["cmd"] = cmd
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
+
+    monkeypatch.setenv("TE_PYTHON", "/tools/uv.exe")
+    monkeypatch.setenv("TOKENECONOMIZER_HOME", str(tmp_path))
+    python = tmp_path / "uv-venv" / "Scripts" / "python.exe"
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b"")
+    monkeypatch.setattr(plugin.subprocess, "run", run)
+    monkeypatch.setattr(plugin, "hermes_home", lambda: "/h")
+    assert plugin.te_command("status") == "ok"
+    assert seen["cmd"][0] == str(python)
+
+
 @pytest.mark.parametrize("fail", [OSError("no python"), subprocess.TimeoutExpired("te", 1)])
 def test_te_never_raises(monkeypatch, fail):
     def run(*a, **kw):

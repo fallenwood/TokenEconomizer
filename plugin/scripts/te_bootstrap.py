@@ -358,7 +358,8 @@ def main():
             getattr(sys.stdin, "buffer", sys.stdin).read()     # bytes: no locale to decode with
             sys.stdout.write("{}\n")
             return 0
-        sys.stderr.write("TokenEconomizer needs Python >= %d.%d (this is %s); set TE_PYTHON\n"
+        sys.stderr.write("TokenEconomizer needs Python >= %d.%d (this is %s); install uv or set "
+                         "TE_PYTHON\n"
                          % (MIN_VERSION[0], MIN_VERSION[1], sys.version.split()[0]))
         return 1
     # Everything the plugin writes under its state root is derived from the agents' session

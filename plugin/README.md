@@ -18,7 +18,8 @@ in [`docs/PLUGIN.md`](../docs/PLUGIN.md).
 
 - [ ] Your agent installed and signed in, any way it supports (a subscription or an API key), at a
   supported version ([Supported versions](../README.md#supported-versions))
-- [ ] Python 3.10 or newer on `PATH` (or set `TE_PYTHON=/path/to/python3.10+`)
+- [ ] Python 3.10 or newer, or `uv`, on `PATH` (or set `TE_PYTHON` to a Python or `uv`
+  executable)
 - [ ] Copilot CLI only: the repository's folder trusted by Copilot (it asks the first time you
   start it there: choose **Yes, and remember this folder for future sessions**); Copilot ignores a
   folder's `.github/copilot` settings otherwise
@@ -158,8 +159,9 @@ end.
 again to refresh Codex's installed copy. Your hook approval is kept unless the update changed the
 hooks themselves; then Codex asks again (**Hooks need review**, or `/hooks`).
 
-**On Windows,** Codex runs each hook's `commandWindows` in its native shell rather than `sh`; it
-starts the hook with the `python` on PATH (3.10 or later), which `TE_PYTHON` does not change.
+**On Windows,** Codex runs each hook's `commandWindows` in its native shell rather than `sh`;
+the command uses the same Windows launcher as the other hosts, including `TE_PYTHON` and the
+`uv` fallback.
 
 **Uninstall.**
 
@@ -232,16 +234,20 @@ copilot plugin list       # tokeneconomizer@tokeneconomizer ... (enabled)
 
 Copilot loads the plugin from the clone directly, without copying it.
 
-On Windows, its hooks and slash commands invoke Python directly from PowerShell commands;
-Git Bash is not required. They work under `Restricted` without changing execution policy or
-using `-ExecutionPolicy Bypass`. Copilot's normal command approval still applies;
-application-control policies that block Python still apply too.
+On Windows, its hooks use the native launcher through PowerShell; Git Bash is not required.
+They work under `Restricted` without changing execution policy or using
+`-ExecutionPolicy Bypass`. Copilot's normal command approval still applies; application-control
+policies that block Python still apply too.
 From a PowerShell terminal in the clone, use a Python >= 3.10 executable, for example:
-`python -X utf8 .\plugin\scripts\te_bootstrap.py cli --host copilot status`.
-The hooks run `TE_PYTHON` as named when set. Otherwise they try `python3`, `python`, and `py`,
-selecting Python >= 3.10 and preferring
-interpreters outside WindowsApps. If only an older Python exists, the bootstrap still handles
-the refusal. The slash commands reuse the interpreter selected by the hook.
+`python -X utf8 .\plugin\scripts\te_bootstrap.py cli --host copilot status`. To use uv, run
+`uv venv --python 3.10`, then
+`.venv\Scripts\python.exe -X utf8 .\plugin\scripts\te_bootstrap.py cli --host copilot status`.
+The hooks run `TE_PYTHON` as named when set (`TE_PYTHON=uv` selects the persistent uv virtual
+environment in `$TOKENECONOMIZER_HOME/uv-venv`). Otherwise they try `python3`, `python`, and `py`,
+selecting Python >= 3.10 and preferring interpreters outside WindowsApps, then fall back to uv.
+After uv creates that environment, later launches reuse it directly and no longer need `uv` on
+PATH. If only an older Python exists, the bootstrap still handles the refusal. The slash commands
+reuse the interpreter selected by the hook.
 
 **2. Check it.** In Copilot's interactive mode, type `/tokeneconomizer:status`. Each slash command
 is a model turn, and Copilot asks before running the plugin's script; choose **Yes**. Slash
@@ -453,7 +459,8 @@ mkdir -p ~/.config/opencode/plugins
 ln -s /path/to/TokenEconomizer/plugin/opencode/tokeneconomizer.ts ~/.config/opencode/plugins/tokeneconomizer.ts
 ```
 
-(Per repository: `.opencode/plugins/`.) Python 3.10+ must be on `PATH`, or named by `TE_PYTHON`.
+(Per repository: `.opencode/plugins/`.) Python 3.10+ or `uv` must be on `PATH`, or a Python / `uv`
+executable can be named by `TE_PYTHON`.
 
 **A copied plugin, not a link,** has no `scripts/` beside it, so it cannot find the dispatcher on
 its own. Point it at the checkout: `TE_CORE_PATH=/path/to/TokenEconomizer`, or `TE_PLUGIN_ROOT`
@@ -1071,7 +1078,7 @@ above the guard's own `judge_confidence` (0.7).
 |---|---|
 | a command prints an import error, or the hooks seem to do nothing | run `~/.tokeneconomizer/bin/te doctor` (or `plugin/scripts/te doctor` in the clone) and read its errors.log lines |
 | errors.log says the package "was not found for the plugin" | the clone the plugin was installed from moved or is gone: add it again, or use the [self-contained install](#codex) |
-| `TokenEconomizer needs Python >= 3.10 (this is 3.x)` | install Python 3.10+ or set `TE_PYTHON` to one |
+| `TokenEconomizer needs Python >= 3.10 (this is 3.x)` | install Python 3.10+ / `uv`, or set `TE_PYTHON` to one |
 | the deny list leaves nothing out after many sessions | run `toolprune refresh-catalog` (Claude Code, Copilot) |
 | a Codex deny list was applied but nothing changed | trust the project in Codex; `~/.tokeneconomizer/bin/te --host codex doctor` says whether it is trusted |
 | errors.log has `sidecall copilot: no reply`, and a session start says the plugin's model calls are paused | they cannot use a Copilot BYOK provider ([Copilot CLI](#copilot-cli)): micro-skills keeps its facts that need no model call (`microskills=envfacts` stops trying the proposer), and the loop guard redirects only at its backstop. Once Copilot is signed in, `config set microskills=on` (or `loopguard=on`) tries again |

@@ -70,7 +70,7 @@ def test_hook_files_run_the_launcher_on_every_event(name, host):
             assert f"--host {host}" in h["command"]
         if host == "copilot":
             assert h["command"].startswith('"${PLUGIN_ROOT}/scripts/te-hook"')
-            assert "te_bootstrap.py" in h["windows"] and "'--host', 'copilot'" in h["windows"]
+            assert "te-hook.cmd" in h["windows"] and "--host copilot" in h["windows"]
             assert h["windows"] == next(_commands(doc))[2]["windows"]
         if host == "codex":
             assert h["commandWindows"] == CODEX_WINDOWS
@@ -80,34 +80,33 @@ def test_hook_files_run_the_launcher_on_every_event(name, host):
             assert "commandWindows" not in h
 
 
-# Codex on Windows runs a hook's `commandWindows` in a native shell, cmd.exe or PowerShell, where
-# `command`'s sh syntax means nothing (0.164.0). This one reads the same in both: Python finds the
-# plugin in the environment Codex sets, so no path or variable is on the line; the code has no
-# space, double quote, `%` or `$`; and `--%`, PowerShell's stop-parsing token, keeps its `;` and
-# parentheses from PowerShell, while cmd.exe passes it on to Python as `-X --%`, which Python
-# ignores (PowerShell drops it, so there `-X` takes the `-u` instead).
+# Codex on Windows runs a hook's `commandWindows` in its native shell, cmd.exe or PowerShell,
+# where `command`'s sh syntax means nothing (0.164.0). Invoking cmd explicitly makes one
+# A literal Start-Process expression has no `$` for an outer PowerShell to expand and no `&`
+# for cmd to interpret. It delegates Python / uv selection to the same batch launcher as Copilot.
 CODEX_WINDOWS = (
-    "python -X --% -u -X utf8 -c e=__import__('os').environ;r=e.get('PLUGIN_ROOT')"
-    "or(e['CLAUDE_PLUGIN_ROOT']);s=__import__('sys');"
-    "s.argv[:]=[r+'/scripts/te_bootstrap.py','hook','--host','codex'];"
-    "__import__('runpy').run_path(s.argv[0],run_name='__main__')")
+    "powershell.exe -NoProfile -NonInteractive -Command "
+    "\"exit (Start-Process -Wait -NoNewWindow -PassThru -FilePath "
+    "(Join-Path ([string]::Concat("
+    "[Environment]::GetEnvironmentVariable('PLUGIN_ROOT','Process'),"
+    "[Environment]::GetEnvironmentVariable('CLAUDE_PLUGIN_ROOT','Process'))) "
+    "'scripts\\te-hook.cmd') -ArgumentList '--host','codex').ExitCode\"")
 
 
 @pytest.mark.parametrize("shell", ["cmd", "powershell"])
-def test_codex_windows_command_runs_the_hook_as_either_shell_passes_it(tmp_path, shell):
-    """Each shell's reading of `commandWindows`, as the argv Python receives: cmd.exe passes the
-    line on as it is, PowerShell without its `--%`. Neither has a quote to strip."""
-    argv = CODEX_WINDOWS.split()
-    if shell == "powershell":
-        argv.remove("--%")
-    assert argv[0] == "python"
+@pytest.mark.parametrize("root_env", ["PLUGIN_ROOT", "CLAUDE_PLUGIN_ROOT"])
+def test_codex_windows_command_uses_the_native_launcher(tmp_path, shell, root_env):
+    if os.name != "nt":
+        pytest.skip("native Windows hook")
     work = tmp_path / "work"
     work.mkdir()
     payload = {"hook_event_name": "SessionStart", "session_id": "s", "cwd": str(work),
                "source": "startup", "turn_id": "t"}
-    p = subprocess.run([sys.executable] + argv[1:], input=json.dumps(payload),
+    host = (CODEX_WINDOWS if shell == "cmd" else
+            f'"{shutil.which("powershell")}" -NoProfile -Command {CODEX_WINDOWS}')
+    p = subprocess.run(host, shell=shell == "cmd", input=json.dumps(payload),
                        capture_output=True, text=True, timeout=60,
-                       env=_hook_env(tmp_path, PLUGIN_ROOT=PLUGIN))
+                       env=_hook_env(tmp_path, **{root_env: PLUGIN}))
     assert p.returncode == 0 and json.loads(p.stdout) == {}, p.stderr[-1000:]
     assert list((tmp_path / "home" / "repos").glob("*/codex/sessions/s.json"))   # it ran
     assert not os.path.exists(tmp_path / "home" / "errors.log")
@@ -416,6 +415,34 @@ def test_the_launcher_fails_open_without_python(tmp_path):
     assert code == 0 and json.loads(out) == {}
 
 
+@pytest.mark.skipif(os.name == "nt", reason="the POSIX launcher path")
+@pytest.mark.parametrize("explicit", [False, True])
+def test_the_launcher_uses_uv_when_python_is_not_on_path(tmp_path, explicit):
+    uv = tmp_path / "bin" / "uv"
+    real_uv = shutil.which("uv")
+    if not real_uv:
+        pytest.skip("uv is not installed")
+    marker = tmp_path / "uv_calls"
+    _script(uv, f'echo call >> "{marker}"\nexec "{real_uv}" "$@"')
+    work = tmp_path / "work"
+    work.mkdir()
+    env = {"PATH": str(uv.parent), "TOKENECONOMIZER_HOME": str(tmp_path / "home")}
+    if explicit:
+        env["TE_PYTHON"] = str(uv)
+    code, out, err = _run_hook(
+        os.path.join(PLUGIN, "scripts", "te-hook"),
+        {"hook_event_name": "SessionStart", "session_id": "s", "cwd": str(work),
+         "source": "startup"}, env)
+    assert code == 0 and json.loads(out) == {}, err
+    assert os.path.isdir(tmp_path / "home" / "repos")
+    env["PATH"] = ""
+    p = subprocess.run(
+        SH + [os.path.join(PLUGIN, "scripts", "te"), "doctor"],
+        capture_output=True, text=True, env=env, cwd=str(work), timeout=60)
+    assert p.returncode == 0 and "python" in p.stdout, p.stderr
+    assert marker.read_text().splitlines() == ["call"]
+
+
 def _old_python(path, marker):
     # Fails the launcher's version probe (`-E -S -c ...`); anything else it is asked to run, it
     # records.
@@ -653,6 +680,34 @@ console.log(JSON.stringify([
     assert run.returncode == 0, run.stderr
     facts = "Facts:\n- one"
     assert json.loads(run.stdout) == ["", facts, facts, "", "", facts]
+
+
+def test_pi_uses_uv_to_supply_python_on_windows(tmp_path):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    ext = os.path.join(PLUGIN, "pi", "tokeneconomizer.ts")
+    script = """
+const { pathToFileURL } = await import("node:url");
+const { launch } = await import(pathToFileURL(process.argv[1]).href);
+process.env.TE_PYTHON = "uv";
+process.env.TOKENECONOMIZER_HOME = process.argv[2];
+console.log(JSON.stringify(launch("te-hook", ["--host", "pi"], "win32")));
+"""
+    python = tmp_path / "uv-venv" / "Scripts" / "python.exe"
+    python.parent.mkdir(parents=True)
+    python.write_bytes(b"")
+    run = subprocess.run([node, "--experimental-strip-types", "--no-warnings",
+                          "--input-type=module", "-e", script, ext, str(tmp_path)],
+                         capture_output=True, text=True, timeout=60)
+    if run.returncode and "strip-types" in run.stderr:
+        pytest.skip("this node cannot load TypeScript")
+    assert run.returncode == 0, run.stderr
+    program, args = json.loads(run.stdout)
+    assert program == str(python)
+    assert args[-4:] == ["te_bootstrap.py", "hook", "--host", "pi"] or \
+        (os.path.basename(args[-4]) == "te_bootstrap.py"
+         and args[-3:] == ["hook", "--host", "pi"])
 
 
 def test_pi_completes_te_as_its_parser_declares_it():

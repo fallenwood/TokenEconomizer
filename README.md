@@ -113,9 +113,9 @@ follow. Four principles guide the mechanisms:
 
 ## Quick start
 
-You need one of these agents, signed in any way it supports, and Python 3.10 or newer on
-`PATH`. The plugin needs no API key of its own and never handles credentials, so any plan or
-login works.
+You need one of these agents, signed in any way it supports, and either Python 3.10 or newer or
+`uv` on `PATH`. The plugin needs no API key of its own and never handles credentials, so any
+plan or login works.
 
 ### Install
 
@@ -511,9 +511,10 @@ agent's own limits; afterwards, `te status` counts the redirects and "still stuc
 | [`docs`](docs/) | `PLUGIN.md` (design, verified agent behavior), `ARCHITECTURE.md` (how the package fits together) and `DROID.md` (the Factory Droid adapter) |
 | [`tests`](tests/) | Offline tests for the package and the plugin |
 
-The package is standard-library only. Run the tests with `python -m pytest tests` (add
-`experiments/tests` for the benchmark side), and build a self-contained plugin bundle with
-`python3 scripts/build_plugin.py --out dist/marketplace`.
+The package is standard-library only. Run the tests with `python -m pytest tests` or
+`uv run --extra test python -m pytest tests` (add `experiments/tests` for the benchmark side),
+and build a self-contained plugin bundle with `python3 scripts/build_plugin.py --out
+dist/marketplace`.
 
 ## Reproducing the experiments
 

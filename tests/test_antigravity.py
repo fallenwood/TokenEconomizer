@@ -8,6 +8,7 @@ repository, so fixtures are written at test time.)
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -512,6 +513,46 @@ def test_windows_hook_launcher_executes_with_valid_python(tmp_path):
                        input=json.dumps(payload), text=True, capture_output=True, env=env)
     assert p.returncode == 0
     assert json.loads(p.stdout.strip()) == {}
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_windows_hook_launcher_uses_uv_when_python_is_not_on_path(tmp_path, explicit):
+    cmd_script = ROOT / "plugin" / "scripts" / "te-hook.cmd"
+    if os.name != "nt":
+        pytest.skip("Windows batch test")
+    uv = tmp_path / "uv folder"
+    uv.mkdir()
+    real_uv = shutil.which("uv")
+    if not real_uv:
+        pytest.skip("uv is not installed")
+    marker = tmp_path / "uv_calls"
+    (uv / "uv.cmd").write_text(
+        f'@echo call>>"{marker}"\n@"{real_uv}" %*\n')
+    env = {k: os.environ[k] for k in ("SYSTEMROOT", "COMSPEC", "PATHEXT",
+                                      "TEMP", "TMP") if k in os.environ}
+    env["PATH"] = os.pathsep.join((str(uv), os.path.join(os.environ["SYSTEMROOT"], "System32")))
+    env["TOKENECONOMIZER_HOME"] = str(tmp_path / "home")
+    if explicit:
+        env["TE_PYTHON"] = str(uv / "uv.cmd")
+    payload = {
+        "hook_event_name": "SessionStart",
+        "conversationId": CID,
+        "workspacePaths": [str(tmp_path)],
+        "transcriptPath": str(tmp_path / "transcript.jsonl"),
+        "modelName": "m",
+        "lastUserInput": "test",
+    }
+    p = subprocess.run([str(cmd_script), "--host", "antigravity", "--event", "SessionStart"],
+                       input=json.dumps(payload), text=True, capture_output=True, env=env)
+    assert p.returncode == 0, p.stderr
+    assert json.loads(p.stdout.strip()) == {}
+    cli = ROOT / "plugin" / "scripts" / "te.cmd"
+    env["PATH"] = os.path.join(os.environ["SYSTEMROOT"], "System32")
+    p = subprocess.run([str(cli), "--host", "antigravity", "doctor"],
+                       text=True, capture_output=True, env=env)
+    assert p.returncode == 0 and "python" in p.stdout, p.stderr
+    assert (tmp_path / "home" / "uv-venv" / "Scripts" / "python.exe").is_file()
+    assert marker.read_text().splitlines() == ["call"]
 
 
 def test_windows_hook_launcher_passes_over_a_te_python_that_is_not_there():

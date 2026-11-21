@@ -108,9 +108,53 @@ const disabled = () => truthy(process.env.TE_SIDECALL) || truthy(process.env.TE_
 /** `opencode run` is headless: one prompt, then the process ends. */
 const mode = () => (process.env.TE_OPENCODE_MODE ?? (process.argv.includes("run") ? "run" : "tui"));
 
+let detectedWindowsPython: [string, string[]] | undefined;
+
+function uvVenvPython(program: string): string {
+  const env = join(
+    process.env.TOKENECONOMIZER_HOME || join(homedir(), ".tokeneconomizer"),
+    "uv-venv",
+  );
+  const python = join(env, "Scripts", "python.exe");
+  if (!existsSync(python)) {
+    const result = spawnSync(program, [
+      "venv", "--allow-existing", "--no-project", "--python", "3.10", env,
+    ], { windowsHide: true, stdio: "ignore", timeout: 120_000 });
+    if (result.status !== 0 && !existsSync(python)) throw new Error("uv venv failed");
+  }
+  return python;
+}
+
+function windowsPython(): [string, string[]] {
+  const configured = process.env.TE_PYTHON;
+  if (configured) {
+    return /(?:^|[\\/])uv(?:\.exe|\.cmd)?$/i.test(configured)
+      ? [uvVenvPython(configured), []] : [configured, []];
+  }
+  if (detectedWindowsPython) return detectedWindowsPython;
+  const probe = "import sys; sys.exit(sys.version_info < (3, 10))";
+  for (const [program, prefix] of [
+    ["python3", []],
+    ["python", []],
+    ["py", ["-3"]],
+  ] as [string, string[]][]) {
+    const result = spawnSync(program, [...prefix, "-E", "-S", "-c", probe], {
+      windowsHide: true,
+      stdio: "ignore",
+      timeout: 10_000,
+    });
+    if (result.status === 0) {
+      detectedWindowsPython = [program, prefix];
+      return detectedWindowsPython;
+    }
+  }
+  detectedWindowsPython = [uvVenvPython("uv"), []];
+  return detectedWindowsPython;
+}
+
 /** The program and arguments that run a launcher. The launchers are POSIX `sh`, which Windows
- * cannot start; there the bootstrap they run is started with Python itself (`TE_PYTHON`, else
- * `python`). */
+ * cannot start; there the bootstrap they run is started with Python itself. Naming `uv` (or
+ * an uv executable) in `TE_PYTHON` supplies a persistent uv virtual environment. */
 function launch(
   script: string,
   args: string[],
@@ -118,7 +162,8 @@ function launch(
 ): [string, string[]] {
   if (platform !== "win32") return [join(SCRIPTS, script), args];
   const kind = script === "te-hook" ? "hook" : "cli";
-  return [process.env.TE_PYTHON || "python", [join(SCRIPTS, "te_bootstrap.py"), kind, ...args]];
+  const [python, prefix] = windowsPython();
+  return [python, [...prefix, join(SCRIPTS, "te_bootstrap.py"), kind, ...args]];
 }
 
 const childEnv = () => ({ ...process.env, PYTHONUTF8: "1", TE_OPENCODE_MODE: mode() });

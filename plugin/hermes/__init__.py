@@ -115,6 +115,21 @@ def state_root():
                            or os.path.join(os.path.expanduser("~"), ".tokeneconomizer"))
 
 
+def _python_command(args):
+    program = os.environ.get("TE_PYTHON") or sys.executable
+    if os.path.basename(program).lower() in ("uv", "uv.exe", "uv.cmd"):
+        env = os.path.join(state_root(), "uv-venv")
+        python = os.path.join(env, "Scripts" if os.name == "nt" else "bin",
+                              "python.exe" if os.name == "nt" else "python")
+        if not os.path.isfile(python):
+            subprocess.run([program, "venv", "--allow-existing", "--no-project",
+                            "--python", "3.10", env],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=HOOK_TIMEOUT_S, **HIDDEN)
+        return [python, *args]
+    return [program, *args]
+
+
 def dispatch(payload, cwd, mode, home):
     """One dispatcher call; {} (no change) on any failure. Python is the one running this file,
     which Hermes needs to be new enough, unless TE_PYTHON names another. It runs in the session's
@@ -123,8 +138,7 @@ def dispatch(payload, cwd, mode, home):
         return {}
     env = dict(os.environ, PYTHONUTF8="1", TE_HERMES_MODE=mode, HERMES_HOME=home)
     try:
-        out = subprocess.run([os.environ.get("TE_PYTHON") or sys.executable, BOOTSTRAP, "hook",
-                              "--host", "hermes"],
+        out = subprocess.run(_python_command([BOOTSTRAP, "hook", "--host", "hermes"]),
                              input=json.dumps(payload), capture_output=True, encoding="utf-8",
                              errors="replace", timeout=HOOK_TIMEOUT_S, cwd=cwd, env=env, **HIDDEN)
         answer = json.loads((out.stdout or "").strip().splitlines()[-1])
@@ -428,8 +442,8 @@ def te_command(raw_args="", cwd=None):
     try:
         argv = shlex.split(raw_args or "")
         where = ["--cwd", cwd] if cwd else []
-        out = subprocess.run([os.environ.get("TE_PYTHON") or sys.executable, BOOTSTRAP, "cli",
-                              "--host", "hermes", *where, *argv],
+        out = subprocess.run(_python_command(
+            [BOOTSTRAP, "cli", "--host", "hermes", *where, *argv]),
                              cwd=cwd, capture_output=True, encoding="utf-8", errors="replace",
                              timeout=HOOK_TIMEOUT_S, stdin=subprocess.DEVNULL,
                              env=dict(os.environ, PYTHONUTF8="1", HERMES_HOME=hermes_home()),
